@@ -3,13 +3,8 @@ import { GoogleGenAI, LiveServerMessage, Modality, Chat } from '@google/genai';
 import { Transcription } from '../types';
 import { decode, decodeAudioData, createBlob } from '../services/audioUtils';
 
-// Helper to access injected process.env from vite.config.ts
-declare const process: {
-  env: {
-    API_KEY: string;
-    [key: string]: string | undefined;
-  }
-};
+// Declare the global constant injected by vite.config.ts
+declare const __APP_API_KEY__: string;
 
 interface VoiceAgentProps {
   onExit: () => void;
@@ -45,7 +40,6 @@ export const VoiceAgent: React.FC<VoiceAgentProps> = ({ onExit, preferredMode })
   const currentInputTranscription = useRef('');
   const currentOutputTranscription = useRef('');
 
-  // The required welcome message
   const WELCOME_TEXT = "Welcome to Rich Klein Crisis Management. May I ask: What industry are you in and where are you calling from?";
 
   const SYSTEM_INSTRUCTION = useMemo(() => `
@@ -99,23 +93,19 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
     setStatus('listening');
   }, []);
 
-  // Robust Key Retrieval: Checks injected process.env first, then standard Vite env
+  // Retrieve the key injected by Vite
   const getApiKey = () => {
-    // 1. Try variable injected by vite.config.ts
-    if (typeof process !== 'undefined' && process.env?.API_KEY) {
-      return process.env.API_KEY;
+    try {
+      if (typeof __APP_API_KEY__ !== 'undefined' && __APP_API_KEY__) {
+        return __APP_API_KEY__;
+      }
+    } catch (e) {
+      console.error("Error accessing __APP_API_KEY__", e);
     }
-    // 2. Try standard Vite client environment (fallback)
-    // @ts-ignore - Ignore TS error for import.meta if types aren't perfect
-    if (import.meta.env?.VITE_API_KEY) {
-      // @ts-ignore
-      return import.meta.env.VITE_API_KEY;
-    }
-    // 3. Try standard Vite generic key (fallback)
-    // @ts-ignore
-    if (import.meta.env?.API_KEY) {
-      // @ts-ignore
-      return import.meta.env.API_KEY;
+    
+    // Fallback for local dev if .env is used without Vite injection
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      return import.meta.env.VITE_API_KEY || import.meta.env.API_KEY || "";
     }
     return "";
   };
@@ -125,7 +115,7 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
 
     try {
       const apiKey = getApiKey();
-      if (!apiKey || apiKey === "undefined" || apiKey === "") return;
+      if (!apiKey) return;
 
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
@@ -165,7 +155,7 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
   const generateGreeting = async (lang: string) => {
     try {
       const apiKey = getApiKey();
-      if (!apiKey || apiKey === "undefined" || apiKey === "") return;
+      if (!apiKey) return;
       const ai = new GoogleGenAI({ apiKey });
       
       const promptLang = lang === 'Mandarin' ? 'Mandarin Chinese' : lang;
@@ -212,12 +202,11 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
   const initializeSession = useCallback(async () => {
     const apiKey = getApiKey();
     
-    // ERROR HANDLING: Developer details in Console, Client-friendly message in UI
+    // ERROR HANDLING
     if (!apiKey || apiKey === "" || apiKey === "undefined") {
-      // Log for the developer (you)
-      console.error("CRITICAL CONFIG ERROR: API_KEY is missing. Check your Netlify Environment Variables. Ensure variable is named 'API_KEY' or 'VITE_API_KEY'. Check Netlify Build Logs to see if the key was detected during build.");
-
-      // Display for the client (public)
+      // DEBUG LOG: Hidden from user, but visible in browser console if you inspect.
+      console.error("CRITICAL: API Key is missing in the client app. This means injection failed.");
+      
       setTranscriptions([{ 
         text: `System Notice: The automated agent is temporarily unavailable due to a connection configuration issue. 
         
@@ -299,12 +288,10 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
 
             if (!hasWelcomedRef.current) {
               setTranscriptions([{ text: WELCOME_TEXT, type: 'model', timestamp: Date.now() }]);
-              // We play the welcome TTS separately to ensure it says exactly what is required
               playTTS(WELCOME_TEXT);
               hasWelcomedRef.current = true;
               lastWelcomedLanguageRef.current = 'English';
             } else if (lastWelcomedLanguageRef.current !== language) {
-              // Language switch occurred, generate greeting in new language
               generateGreeting(language);
               lastWelcomedLanguageRef.current = language;
             }
@@ -340,7 +327,7 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
 
             const base64Audio = message.serverContent?.modelTurn?.parts?.find(p => p.inlineData)?.inlineData?.data;
             if (base64Audio && audioContextOutRef.current) {
-              if (!audioOutputEnabled) return; // Check if output is muted
+              if (!audioOutputEnabled) return; 
 
               const ctx = audioContextOutRef.current;
               const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
@@ -360,7 +347,6 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
           },
           onerror: (err) => {
             console.error('Live Error:', err);
-            // General error message for user
             setTranscriptions(prev => [...prev, { text: "Connection interrupted. Please try again or use the WhatsApp button for immediate assistance.", type: 'model', timestamp: Date.now() }]);
             setStatus('idle');
           },
@@ -379,7 +365,6 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
     } catch (err) {
       console.error('Init failed:', err);
       setStatus('idle');
-      // Generic professional message for the user, hiding technical "init failed" details
       setTranscriptions(prev => [...prev, { 
         text: `System Notice: Unable to establish a secure connection at this time. Please use the direct contact methods (WhatsApp or Email) for immediate assistance.`, 
         type: 'model', 
@@ -418,12 +403,9 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
   };
 
   useEffect(() => {
-    // Only initialize if we have a valid key placeholder or a real key, 
-    // waiting for component mount ensures window object is available.
     initializeSession();
     
     return () => {
-      // Robust Cleanup: ensure audio hardware is fully released when session ends
       if (sessionPromiseRef.current) sessionPromiseRef.current.then(s => s.close());
       
       if (streamRef.current) {
