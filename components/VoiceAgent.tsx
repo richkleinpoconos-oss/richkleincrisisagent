@@ -3,9 +3,6 @@ import { GoogleGenAI, LiveServerMessage, Modality, Chat } from '@google/genai';
 import { Transcription } from '../types';
 import { decode, decodeAudioData, createBlob } from '../services/audioUtils';
 
-// Global constant injected by vite.config.ts
-declare const __APP_API_KEY__: string;
-
 interface VoiceAgentProps {
   onExit: () => void;
   preferredMode: 'voice' | 'message';
@@ -93,35 +90,13 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
     setStatus('listening');
   }, []);
 
-  // Safe Accessor for the Global API Key
-  const getApiKey = () => {
-    try {
-      // Check for the variable injected by vite.config.ts
-      if (typeof __APP_API_KEY__ !== 'undefined' && __APP_API_KEY__) {
-        return __APP_API_KEY__;
-      }
-    } catch (e) {
-      console.error("Error retrieving injected API key", e);
-    }
-    
-    // Fallback for local development if Vite injection didn't happen
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      // @ts-ignore
-      return import.meta.env.VITE_API_KEY || import.meta.env.API_KEY || "";
-    }
-
-    return "";
-  };
-
   const playTTS = async (text: string) => {
     if (!audioOutputEnabled) return;
 
     try {
-      const apiKey = getApiKey();
-      if (!apiKey) return;
+      if (!process.env.API_KEY) return;
 
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: text }] }],
@@ -158,9 +133,8 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
 
   const generateGreeting = async (lang: string) => {
     try {
-      const apiKey = getApiKey();
-      if (!apiKey) return;
-      const ai = new GoogleGenAI({ apiKey });
+      if (!process.env.API_KEY) return;
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
       const promptLang = lang === 'Mandarin' ? 'Mandarin Chinese' : lang;
       const prompt = `You are a professional crisis management agent. 
@@ -204,13 +178,10 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
   };
 
   const initializeSession = useCallback(async () => {
-    const apiKey = getApiKey();
-    
-    // ERROR HANDLING
-    if (!apiKey || apiKey === "") {
-      // DEBUG LOG: Visible only in Developer Console
-      console.error("CRITICAL ERROR: API Key is missing. The variable __APP_API_KEY__ was empty.");
-      
+    // Check if API key is present
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
+      console.error("CRITICAL: API Key is missing in the environment.");
       setTranscriptions([{ 
         text: `System Notice: The automated agent is temporarily unavailable due to a connection configuration issue. 
         
@@ -224,7 +195,7 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
 
     try {
       setStatus('connecting');
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: apiKey });
 
       chatRef.current = ai.chats.create({
         model: 'gemini-3-flash-preview',
@@ -234,7 +205,6 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
       if (!audioContextInRef.current) audioContextInRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       if (!audioContextOutRef.current) audioContextOutRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       
-      // Safety check: Resume AudioContexts if they are suspended (common in some browsers)
       try {
         if (audioContextInRef.current.state === 'suspended') {
           await audioContextInRef.current.resume();
@@ -248,12 +218,13 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
       
       const audioCtxIn = audioContextInRef.current;
       
-      // Request microphone access
       let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (mediaErr) {
-        throw new Error("Microphone access denied. Please allow microphone permissions in your browser settings.");
+        setTranscriptions(prev => [...prev, { text: "Microphone access is required for voice mode. Please check your browser permissions.", type: 'model', timestamp: Date.now() }]);
+        setStatus('idle');
+        return;
       }
       streamRef.current = stream;
 
@@ -261,6 +232,7 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
         model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         callbacks: {
           onopen: () => {
+            console.log("Session connected successfully");
             setIsActive(true);
             setStatus('listening');
             const source = audioCtxIn.createMediaStreamSource(stream);
@@ -273,7 +245,6 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
             scriptProcessor.onaudioprocess = (event) => {
               if (!micEnabled) return;
               const inputData = event.inputBuffer.getChannelData(0);
-              // Simple VAD (Voice Activity Detection)
               let sum = 0;
               for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
               const rms = Math.sqrt(sum / inputData.length);
@@ -351,7 +322,6 @@ For immediate strategic counsel, please use the WhatsApp button above or email r
           },
           onerror: (err) => {
             console.error('Live Error:', err);
-            setTranscriptions(prev => [...prev, { text: "Connection interrupted. Please try again or use the WhatsApp button for immediate assistance.", type: 'model', timestamp: Date.now() }]);
             setStatus('idle');
           },
           onclose: () => setIsActive(false)
