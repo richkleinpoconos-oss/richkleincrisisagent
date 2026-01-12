@@ -3,7 +3,7 @@ import { GoogleGenAI, LiveServerMessage, Modality, Chat } from '@google/genai';
 import { Transcription } from '../types';
 import { decode, decodeAudioData, createBlob } from '../services/audioUtils';
 
-// Declare the global constant injected by vite.config.ts
+// Global constant injected by vite.config.ts
 declare const __APP_API_KEY__: string;
 
 interface VoiceAgentProps {
@@ -93,20 +93,24 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
     setStatus('listening');
   }, []);
 
-  // Retrieve the key injected by Vite
+  // Safe Accessor for the Global API Key
   const getApiKey = () => {
     try {
+      // Check for the variable injected by vite.config.ts
       if (typeof __APP_API_KEY__ !== 'undefined' && __APP_API_KEY__) {
         return __APP_API_KEY__;
       }
     } catch (e) {
-      console.error("Error accessing __APP_API_KEY__", e);
+      console.error("Error retrieving injected API key", e);
     }
     
-    // Fallback for local dev if .env is used without Vite injection
+    // Fallback for local development if Vite injection didn't happen
+    // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env) {
+      // @ts-ignore
       return import.meta.env.VITE_API_KEY || import.meta.env.API_KEY || "";
     }
+
     return "";
   };
 
@@ -203,9 +207,9 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
     const apiKey = getApiKey();
     
     // ERROR HANDLING
-    if (!apiKey || apiKey === "" || apiKey === "undefined") {
-      // DEBUG LOG: Hidden from user, but visible in browser console if you inspect.
-      console.error("CRITICAL: API Key is missing in the client app. This means injection failed.");
+    if (!apiKey || apiKey === "") {
+      // DEBUG LOG: Visible only in Developer Console
+      console.error("CRITICAL ERROR: API Key is missing. The variable __APP_API_KEY__ was empty.");
       
       setTranscriptions([{ 
         text: `System Notice: The automated agent is temporarily unavailable due to a connection configuration issue. 
