@@ -104,7 +104,7 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
 
     try {
       const apiKey = process.env.API_KEY;
-      if (!apiKey) return;
+      if (!apiKey || apiKey === "undefined" || apiKey === "") return;
 
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
@@ -144,7 +144,7 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
   const generateGreeting = async (lang: string) => {
     try {
       const apiKey = process.env.API_KEY;
-      if (!apiKey) return;
+      if (!apiKey || apiKey === "undefined" || apiKey === "") return;
       const ai = new GoogleGenAI({ apiKey });
       
       const promptLang = lang === 'Mandarin' ? 'Mandarin Chinese' : lang;
@@ -191,14 +191,20 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
   const initializeSession = useCallback(async () => {
     const apiKey = process.env.API_KEY;
     
-    // Check if key is missing
-    if (!apiKey || apiKey === "") {
-      console.error("API Key is missing.");
+    // ERROR HANDLING: Developer details in Console, Client-friendly message in UI
+    if (!apiKey || apiKey === "" || apiKey === "undefined") {
+      // Log for the developer (you)
+      console.error("CRITICAL CONFIG ERROR: API_KEY is missing. Please go to Netlify Site Configuration > Environment Variables, add API_KEY, and Trigger a new Deploy (Clear cache and deploy).");
+
+      // Display for the client (public)
       setTranscriptions([{ 
-        text: "System Alert: API Key missing. Please ensure 'API_KEY' is set in Netlify Environment Variables and REDEPLOY the site.", 
+        text: `System Notice: The automated agent is temporarily unavailable due to a connection configuration issue. 
+        
+For immediate strategic counsel, please use the WhatsApp button above or email rich@richkleincrisis.com directly.`, 
         type: 'model', 
         timestamp: Date.now() 
       }]);
+      setStatus('idle');
       return;
     }
 
@@ -333,8 +339,8 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
           },
           onerror: (err) => {
             console.error('Live Error:', err);
-            // If the error is related to authentication (often 400/403), alert the user
-            setTranscriptions(prev => [...prev, { text: "Connection Error: Please check your API Key and internet connection.", type: 'model', timestamp: Date.now() }]);
+            // General error message for user
+            setTranscriptions(prev => [...prev, { text: "Connection interrupted. Please try again or use the WhatsApp button for immediate assistance.", type: 'model', timestamp: Date.now() }]);
             setStatus('idle');
           },
           onclose: () => setIsActive(false)
@@ -352,9 +358,9 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
     } catch (err) {
       console.error('Init failed:', err);
       setStatus('idle');
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      // Generic professional message for the user, hiding technical "init failed" details
       setTranscriptions(prev => [...prev, { 
-        text: `System Initialization Failed: ${errorMessage}.\n\nTroubleshooting:\n1. Check Microphone permissions.\n2. Verify API Key is valid.\n3. Ensure you have REDEPLOYED the site after adding the key.`, 
+        text: `System Notice: Unable to establish a secure connection at this time. Please use the direct contact methods (WhatsApp or Email) for immediate assistance.`, 
         type: 'model', 
         timestamp: Date.now() 
       }]);
@@ -542,7 +548,7 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
             <div key={i} className={`flex ${t.type === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-1 duration-200`}>
               <div 
                 dir="auto"
-                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                className={`max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                 t.type === 'user' 
                 ? 'bg-blue-600 text-white' 
                 : 'bg-slate-800 text-slate-200 border border-white/5'
