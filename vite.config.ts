@@ -3,26 +3,23 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
   const env = loadEnv(mode, process.cwd(), '');
 
-  // Robustly find the API Key. Netlify might provide it in process.env or loaded env.
-  // We check for both API_KEY and VITE_API_KEY to be safe.
+  // Aggressively search for the key in all possible locations
   const apiKey = env.API_KEY || process.env.API_KEY || env.VITE_API_KEY || process.env.VITE_API_KEY || "";
 
-  // Log during build (visible in Netlify Deploy Logs)
+  // Log status to Netlify Build Logs
   if (apiKey) {
-    console.log("✅ [Vite Config] API_KEY found and injected successfully.");
+    console.log("✅ [Vite Config] API_KEY found. Injecting into app bundle.");
   } else {
-    console.warn("⚠️ [Vite Config] WARNING: API_KEY not found in environment variables. Voice agent will not function.");
+    console.warn("⚠️ [Vite Config] WARNING: API_KEY not found in environment variables. App will show System Notice.");
   }
   
   return {
     plugins: [react()],
     define: {
-      // Safely inject the API key. 
-      // If empty, it injects an empty string, which VoiceAgent.tsx handles gracefully.
-      'process.env.API_KEY': JSON.stringify(apiKey),
+      // We inject a global constant string. This is safer than patching process.env
+      '__APP_API_KEY__': JSON.stringify(apiKey),
     },
     build: {
       target: 'esnext'
