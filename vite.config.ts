@@ -5,20 +5,21 @@ export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '');
 
-  // Aggressively search for the key in all possible locations
-  const apiKey = env.API_KEY || process.env.API_KEY || env.VITE_API_KEY || process.env.VITE_API_KEY || "";
+  // 1. Prioritize Netlify/System environment variables
+  // 2. Fallback to .env files
+  const apiKey = process.env.API_KEY || process.env.VITE_API_KEY || env.API_KEY || env.VITE_API_KEY || "";
 
-  // Log status to Netlify Build Logs
+  // Log status to Netlify Build Logs (Hidden from client, visible in Netlify Dashboard)
   if (apiKey) {
-    console.log("✅ [Vite Config] API_KEY found. Injecting into app bundle.");
+    console.log("✅ [Vite Config] API_KEY successfully detected. Injecting into build.");
   } else {
-    console.warn("⚠️ [Vite Config] WARNING: API_KEY not found in environment variables. App will show System Notice.");
+    console.warn("⚠️ [Vite Config] WARNING: API_KEY is missing/empty. The Voice Agent will show a 'System Notice' error.");
   }
   
   return {
     plugins: [react()],
     define: {
-      // We inject a global constant string. This is safer than patching process.env
+      // Define global constant for the app to use safely
       '__APP_API_KEY__': JSON.stringify(apiKey),
     },
     build: {
