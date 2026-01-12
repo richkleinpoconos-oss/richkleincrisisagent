@@ -3,7 +3,7 @@ import { GoogleGenAI, LiveServerMessage, Modality, Chat } from '@google/genai';
 import { Transcription } from '../types';
 import { decode, decodeAudioData, createBlob } from '../services/audioUtils';
 
-// CRITICAL FIX: Declare process to prevent TypeScript "Cannot find name 'process'" build error
+// Helper to access injected process.env from vite.config.ts
 declare const process: {
   env: {
     API_KEY: string;
@@ -99,11 +99,32 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
     setStatus('listening');
   }, []);
 
+  // Robust Key Retrieval: Checks injected process.env first, then standard Vite env
+  const getApiKey = () => {
+    // 1. Try variable injected by vite.config.ts
+    if (typeof process !== 'undefined' && process.env?.API_KEY) {
+      return process.env.API_KEY;
+    }
+    // 2. Try standard Vite client environment (fallback)
+    // @ts-ignore - Ignore TS error for import.meta if types aren't perfect
+    if (import.meta.env?.VITE_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_API_KEY;
+    }
+    // 3. Try standard Vite generic key (fallback)
+    // @ts-ignore
+    if (import.meta.env?.API_KEY) {
+      // @ts-ignore
+      return import.meta.env.API_KEY;
+    }
+    return "";
+  };
+
   const playTTS = async (text: string) => {
     if (!audioOutputEnabled) return;
 
     try {
-      const apiKey = process.env.API_KEY;
+      const apiKey = getApiKey();
       if (!apiKey || apiKey === "undefined" || apiKey === "") return;
 
       const ai = new GoogleGenAI({ apiKey });
@@ -143,7 +164,7 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
 
   const generateGreeting = async (lang: string) => {
     try {
-      const apiKey = process.env.API_KEY;
+      const apiKey = getApiKey();
       if (!apiKey || apiKey === "undefined" || apiKey === "") return;
       const ai = new GoogleGenAI({ apiKey });
       
@@ -189,12 +210,12 @@ CRITICAL PROTOCOLS (MUST FOLLOW EXACTLY):
   };
 
   const initializeSession = useCallback(async () => {
-    const apiKey = process.env.API_KEY;
+    const apiKey = getApiKey();
     
     // ERROR HANDLING: Developer details in Console, Client-friendly message in UI
     if (!apiKey || apiKey === "" || apiKey === "undefined") {
       // Log for the developer (you)
-      console.error("CRITICAL CONFIG ERROR: API_KEY is missing. Please go to Netlify Site Configuration > Environment Variables, add API_KEY, and Trigger a new Deploy (Clear cache and deploy).");
+      console.error("CRITICAL CONFIG ERROR: API_KEY is missing. Check your Netlify Environment Variables. Ensure variable is named 'API_KEY' or 'VITE_API_KEY'. Check Netlify Build Logs to see if the key was detected during build.");
 
       // Display for the client (public)
       setTranscriptions([{ 
